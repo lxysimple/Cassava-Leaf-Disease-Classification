@@ -47,23 +47,26 @@ def get_img(path):
 
 
 def rand_bbox(size, lam):
-    '''cutmix 的 bbox 截取函数
+    '''cutmix一张图,返回即将裁剪的左上、右下坐标
+
     Args:
         size : tuple 图片尺寸 e.g (256,256)
         lam  : float 截取比例
+
     Returns:
-        bbox 的左上角和右下角坐标
-        int,int,int,int
+        int,int,int,int: bbox 的左上角和右下角坐标
+
     '''
     W = size[0]  # 截取图片的宽度
     H = size[1]  # 截取图片的高度
-    cut_rat = np.sqrt(1. - lam)  # 需要截取的 bbox 比例
+    cut_rat = np.sqrt(1. - lam)  # 需要截取的 bbox 比例,bbox就是我们要裁剪的子图
     cut_w = np.int(W * cut_rat)  # 需要截取的 bbox 宽度
     cut_h = np.int(H * cut_rat)  # 需要截取的 bbox 高度
 
     cx = np.random.randint(W)  # 均匀分布采样，随机选择截取的 bbox 的中心点 x 坐标
     cy = np.random.randint(H)  # 均匀分布采样，随机选择截取的 bbox 的中心点 y 坐标
 
+    # clip保证中心点在边缘时,裁剪尺寸能够进行适当的调整
     bbx1 = np.clip(cx - cut_w // 2, 0, W)  # 左上角 x 坐标
     bby1 = np.clip(cy - cut_h // 2, 0, H)  # 左上角 y 坐标
     bbx2 = np.clip(cx + cut_w // 2, 0, W)  # 右下角 x 坐标
@@ -97,21 +100,24 @@ class CassavaDataset(Dataset):
                 'alpha': 1,
             }):
         '''
+
         Args:
             df : DataFrame , 样本图片的文件名和标签
             data_root : str , 图片所在的文件路径，绝对路径
             transforms : object , 图片增强
             output_label : bool , 是否输出标签
             one_hot_label : bool , 是否进行 onehot 编码
-            do_fmix : bool , 是否使用 fmix
-            fmix_params :dict , fmix 的参数 {'alpha':1.,'decay_power':3.,'shape':(256,256),'max_soft':0.3,'reformulate':False}
-            do_cutmix : bool, 是否使用 cutmix
-            cutmix_params : dict , cutmix 的参数 {'alpha':1.}
+            do_fmix : bool , 是否使用 fmix,一种数据增强算法
+            fmix_params :dict , fmix 的超参数 {'alpha':1.,'decay_power':3.,'shape':(256,256),'max_soft':0.3,'reformulate':False}
+            do_cutmix : bool, 是否使用 cutmix,一种数据增强算法
+            cutmix_params : dict , cutmix 的超参数 {'alpha':1.}
         Raises:
 
         '''
+
         super().__init__()
-        self.df = df.reset_index(drop=True).copy()  # 重新生成索引
+        # 重新生成索引,避免后续划分数据集后,索引是乱序的
+        self.df = df.reset_index(drop=True).copy()
         self.transforms = transforms
         self.data_root = data_root
         self.do_fmix = do_fmix
@@ -122,6 +128,7 @@ class CassavaDataset(Dataset):
         self.one_hot_label = one_hot_label
         if output_label:
             self.labels = self.df['label'].values
+            # 我感觉是给各字符串标签生成独热编码
             if one_hot_label:
                 self.labels = np.eye(self.df['label'].max() +
                                      1)[self.labels]  # 使用单位矩阵生成 onehot 编码
@@ -201,7 +208,7 @@ class CassavaDataset(Dataset):
 
 def prepare_dataloader(df, trn_idx, val_idx, data_root, trn_transform,
                        val_transform, bs, n_job):
-    '''多进程数据生成器
+    '''多进程数据生成器,其实就是定义DataLoader,多进程只不过是使用DataLoader的多进程
     Args:
         df : DataFrame , 样本图片的文件名和标签
         trn_idx : ndarray , 训练集索引列表
@@ -273,7 +280,7 @@ def train_one_epoch(epoch,
         device : str , 使用的训练设备 e.g 'cuda:0'
         scheduler : object , 学习率调整策略
         schd_batch_update : bool, 如果是 true 则每一个 batch 都调整，否则等一个 epoch 结束后再调整
-        accum_iter : int , 梯度累加
+        accum_iter : int , 梯度累加,代表当前GPU不够用了,需要多GPU或1个GPU多次min-batch
     '''
 
     model.train()  # 开启训练模式
@@ -282,22 +289,30 @@ def train_one_epoch(epoch,
 
     pbar = tqdm(enumerate(train_loader), total=len(train_loader))  # 构造进度条
 
+    # __getitem__,返回imgs, image_labels
     for step, (imgs, image_labels) in pbar:  # 遍历每个 batch
         imgs = imgs.to(device).float()
         image_labels = image_labels.to(device).long()
 
-        with autocast():  # 开启自动混精度
+        with autocast():  # 开启自动混精度,自动匹配float32/16算子
             image_preds = model(imgs)  # 前向传播，计算预测值
+            # 一个min-batch样本的均值loss,在loss_fn里应该有取均值步骤
             loss = loss_fn(image_preds, image_labels)  # 计算 loss
 
-        scaler.scale(loss).backward()  # 对 loss scale, scale梯度
 
-        # loss 正则,使用指数平均
+        # 混合精度求前向传播
+        # 并未梯度清0,也就是多个min-batch的样本梯度是累加起来的
+        scaler.scale(loss).backward()
+
+        # loss 正则,让loss图像更平滑,效果待实验
         if running_loss is None:
             running_loss = loss.item()
         else:
             running_loss = running_loss * .99 + loss.item() * .01
 
+        # 每accum_iter个min-batch才进行一次梯度更新
+        # 当batchsize变大,且只有1个GPU,accum_iter=2,则会将batch拆成2个min-batch,求均值loss,累加梯度,造成伪并行
+        # 当有两个GPU时,1个负责第一个min-batch,求出梯度传给第2个GPU,累加第2个GPU梯度,然后更新参数
         if ((step + 1) % accum_iter == 0) or ((step + 1) == len(train_loader)):
             scaler.step(
                 optimizer)  # unscale 梯度, 如果梯度没有 overflow, 使用 opt 更新梯度, 否则不更新
@@ -338,15 +353,17 @@ def valid_one_epoch(epoch, model, loss_fn, val_loader, device):
         imgs = imgs.to(device).float()
         image_labels = image_labels.to(device).long()
 
-        image_preds = model(imgs)  # 前向传播，计算预测值
+        image_preds = model(imgs)  # 前向传播，计算预测值,是一个概率向量
+        # 获取概率最高的类别,放到image_preds_all中,放到image_preds_all中存的是一个batch的预测标签
         image_preds_all += [
             torch.argmax(image_preds, 1).detach().cpu().numpy()
-        ]  # 获取预测标签
+        ]
+        # 获取预测标签,image_targets_all存的是一个batch的真实标签
         image_targets_all += [image_labels.detach().cpu().numpy()]  # 获取真实标签
 
         loss = loss_fn(image_preds, image_labels)  # 计算损失
 
-        loss_sum += loss.item() * image_labels.shape[0]  # 计算损失和
+        loss_sum += loss.item() * image_labels.shape[0]  # 计算损失和,因为要算1个batch的均值loss
         sample_num += image_labels.shape[0]  # 样本数
 
         description = f'epoch {epoch} loss: {loss_sum/sample_num:.4f}'  # 打印平均 loss
@@ -354,6 +371,7 @@ def valid_one_epoch(epoch, model, loss_fn, val_loader, device):
 
     image_preds_all = np.concatenate(image_preds_all)
     image_targets_all = np.concatenate(image_targets_all)
+    # 打印出整个验证样本的acc
     print('validation multi-class accuracy = {:.4f}'.format(
         (image_preds_all == image_targets_all).mean()))  # 打印准确率
 
