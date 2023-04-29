@@ -82,7 +82,8 @@ for i,clf in enumerate(clfs):
     x_test_stack[:, i] = x_stack_test_n.mean(axis=1)
 
 
-#第二层模型LR,主要负责找出4个模型的优缺点,可以不准确的理解为,就是找4个模型计算结果各自的权重
+# 第二层模型LR,主要负责找出4个模型的优缺点,利用3个模型的优点去弥补1个模型的缺点
+# 输入(n_samples, n_features),输出(n_samples,)是每个样本的分类标签
 clf_second = LogisticRegression(solver="lbfgs")
 # x_train_stack:(3000,4),y_train(3000)
 clf_second.fit(x_train_stack,y_train)

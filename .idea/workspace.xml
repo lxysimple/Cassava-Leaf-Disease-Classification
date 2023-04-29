@@ -2,13 +2,8 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="731eca92-b28f-4ae4-bb00-d05babd9070c" name="Changes" comment="">
-      <change afterPath="$PROJECT_DIR$/src/stacking.py" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/.idea/Cassava-Leaf-Disease-Classification.iml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/Cassava-Leaf-Disease-Classification.iml" afterDir="false" />
       <change beforePath="$PROJECT_DIR$/.idea/workspace.xml" beforeDir="false" afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/.ipynb_checkpoints/train-checkpoint.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/src/.ipynb_checkpoints/train-checkpoint.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/submit.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/src/submit.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/train.ipynb" beforeDir="false" afterPath="$PROJECT_DIR$/src/train.ipynb" afterDir="false" />
-      <change beforePath="$PROJECT_DIR$/src/utils/fmix.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/utils/fmix.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/stacking.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/stacking.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
